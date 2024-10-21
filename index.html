@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Griestu Meistars Ceiling Calculator</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Griestu Meistars Ceiling Calculator</h1>
+    </header>
+
+    <main>
+        <!-- Input Section -->
+        <section id="input-section">
+            <h2>Design Parameters Input</h2>
+            <form id="input-form">
+                <div class="form-group">
+                    <label for="roomLength">Room Length (mm):</label>
+                    <input type="number" id="roomLength" name="roomLength" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="roomWidth">Room Width (mm):</label>
+                    <input type="number" id="roomWidth" name="roomWidth" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label for="tileSize">Tile Size (mm):</label>
+                    <select id="tileSize" name="tileSize">
+                        <option value="600x600">600 x 600 mm</option>
+                        <option value="600x1200">600 x 1200 mm</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="frameRotation">Frame Rotation:</label>
+                    <select id="frameRotation" name="frameRotation">
+                        <option value="0">0°</option>
+                        <option value="90">90°</option>
+                        <option value="180">180°</option>
+                        <option value="270">270°</option>
+                    </select>
+                </div>
+
+                <h3>Grid Elements to Display:</h3>
+                <div class="form-group checkbox-group">
+                    <label><input type="checkbox" id="showTiles" checked> Show Tiles</label>
+                    <label><input type="checkbox" id="showMainRunners" checked> Show Main Runners</label>
+                    <label><input type="checkbox" id="showCrossTees" checked> Show Cross Tees</label>
+                    <label><input type="checkbox" id="showSuspensionWires" checked> Show Suspension Wires</label>
+                    <label><input type="checkbox" id="showDimensions" checked> Show Dimensions</label>
+                </div>
+
+                <div class="form-buttons">
+                    <button type="button" id="calculateButton">Calculate</button>
+                    <button type="reset" id="resetButton">Reset</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- Summary and Material Breakdown Section -->
+        <section id="summary-material-section">
+            <div id="summary-section">
+                <h2>Summary</h2>
+                <p>Total Area: <span id="totalArea">0</span> m²</p>
+                <p>Total Perimeter: <span id="totalPerimeter">0</span> m</p>
+                <p>Room Dimensions: <span id="roomDimensions">0 x 0</span> mm</p>
+                <!-- Perimeter Cuts Information -->
+                <h3>Perimeter Cuts:</h3>
+                <p>Left/Right Cut Width: <span id="perimeterCutWidth">0</span> mm</p>
+                <p>Top/Bottom Cut Length: <span id="perimeterCutLength">0</span> mm</p>
+            </div>
+
+            <div id="material-breakdown">
+                <h2>Material Breakdown</h2>
+                <ul>
+                    <li>Ceiling Tiles Count: <span id="tilesCount">0</span></li>
+                    <li>Main Runners Count: <span id="mainRunnersCount">0</span></li>
+                    <li>Cross Tees Count:
+                        <ul>
+                            <li>Long Cross Tees (1200mm): <span id="longCrossTeesCount">0</span></li>
+                            <li>Short Cross Tees (600mm): <span id="shortCrossTeesCount">0</span></li>
+                        </ul>
+                    </li>
+                    <li>Suspension Wires Count: <span id="suspensionWiresCount">0</span></li>
+                    <li>Perimeter Trims Count: <span id="perimeterTrimsCount">0</span></li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- Visualization Section -->
+        <section id="visualization-section">
+            <h2>Grid Visualization</h2>
+            <div class="canvas-container">
+                <canvas id="ceilingCanvas"></canvas>
+            </div>
+            <div class="canvas-buttons">
+                <button type="button" id="downloadImage">Download Image</button>
+            </div>
+            <!-- Legend -->
+            <div id="legend">
+                <h3>Legend</h3>
+                <ul>
+                    <li><span class="legend-color perimeter"></span> Perimeter Trim</li>
+                    <li><span class="legend-color tiles"></span> Tiles</li>
+                    <li><span class="legend-color main-runners"></span> Main Runners</li>
+                    <li><span class="legend-color long-cross-tees"></span> Long Cross Tees (1200mm)</li>
+                    <li><span class="legend-color short-cross-tees"></span> Short Cross Tees (600mm)</li>
+                    <li><span class="legend-color suspension-wires"></span> Suspension Wires</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        &copy; 2023 Griestu Meistars
+    </footer>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
