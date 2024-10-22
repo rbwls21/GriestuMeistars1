@@ -64,54 +64,62 @@ function validateInputs(roomLength, roomWidth) {
 }
 
 function calculateGridLayout(roomLength, roomWidth, tileWidth, tileLength) {
-    // Calculate the number of full tiles along each axis
-    const numFullTilesX = Math.floor((roomWidth - 2 * 10) / tileWidth); // 10mm gap for perimeter trims
-    const numFullTilesY = Math.floor((roomLength - 2 * 10) / tileLength);
+    // Minimum and Maximum leftover size on each side
+    const MIN_LEFTOVER = 301; // mm
+    const MAX_LEFTOVER = 600; // mm
 
-    // Calculate leftover space on each axis
-    const leftoverX = roomWidth - numFullTilesX * tileWidth;
-    const leftoverY = roomLength - numFullTilesY * tileLength;
+    // Calculate the number of full tiles along each axis ensuring leftovers >= MIN_LEFTOVER
+    let numFullTilesX = Math.floor((roomWidth - 2 * MIN_LEFTOVER) / tileWidth);
+    let leftoverX = roomWidth - numFullTilesX * tileWidth;
+    let leftoverPerSideX = leftoverX / 2;
 
-    // Calculate perimeter cuts (equal on both sides)
-    const perimeterCutX = leftoverX / 2;
-    const perimeterCutY = leftoverY / 2;
+    let numFullTilesY = Math.floor((roomLength - 2 * MIN_LEFTOVER) / tileLength);
+    let leftoverY = roomLength - numFullTilesY * tileLength;
+    let leftoverPerSideY = leftoverY / 2;
 
-    // Update summary with perimeter cuts
-    document.getElementById('perimeterCutWidth').textContent = perimeterCutX.toFixed(0);
-    document.getElementById('perimeterCutLength').textContent = perimeterCutY.toFixed(0);
+    // If leftover per side is less than MIN_LEFTOVER, reduce the number of full tiles by one
+    if (leftoverPerSideX < MIN_LEFTOVER) {
+        if (numFullTilesX > 0) {
+            numFullTilesX -= 1;
+            leftoverX = roomWidth - numFullTilesX * tileWidth;
+            leftoverPerSideX = leftoverX / 2;
+        }
+    }
 
-    // Adjust if perimeter cuts are too small (less than 100mm)
-    if (perimeterCutX < 100 || perimeterCutY < 100) {
-        alert('Perimeter cuts are too small (less than 100mm). Please adjust room dimensions or tile size.');
+    if (leftoverPerSideY < MIN_LEFTOVER) {
+        if (numFullTilesY > 0) {
+            numFullTilesY -= 1;
+            leftoverY = roomLength - numFullTilesY * tileLength;
+            leftoverPerSideY = leftoverY / 2;
+        }
+    }
+
+    // Recalculate leftovers after potential reduction
+    const adjustedLeftoverX = roomWidth - numFullTilesX * tileWidth;
+    const adjustedLeftoverPerSideX = adjustedLeftoverX / 2;
+
+    const adjustedLeftoverY = roomLength - numFullTilesY * tileLength;
+    const adjustedLeftoverPerSideY = adjustedLeftoverY / 2;
+
+    // Ensure that the adjusted leftovers are within the allowed range
+    if ((adjustedLeftoverPerSideX < MIN_LEFTOVER && adjustedLeftoverPerSideX !== 0) ||
+        (adjustedLeftoverPerSideY < MIN_LEFTOVER && adjustedLeftoverPerSideY !== 0)) {
+        alert('Unable to fit tiles with the given constraints. Please adjust room dimensions or tile size.');
+        return null;
+    }
+
+    if ((adjustedLeftoverPerSideX > MAX_LEFTOVER && adjustedLeftoverPerSideX !== 0) ||
+        (adjustedLeftoverPerSideY > MAX_LEFTOVER && adjustedLeftoverPerSideY !== 0)) {
+        alert(`The leftover space on each side should not exceed ${MAX_LEFTOVER}mm. Please adjust room dimensions or tile size.`);
         return null;
     }
 
     // Generate grid lines for tiles
-    const tileGridX = [0];
-    for (let i = 0; i < numFullTilesX + 1; i++) {
-        tileGridX.push(perimeterCutX + i * tileWidth);
-    }
-    tileGridX.push(roomWidth);
+    const tileGridX = generateTileGridLines(roomWidth, tileWidth, adjustedLeftoverPerSideX);
+    const tileGridY = generateTileGridLines(roomLength, tileLength, adjustedLeftoverPerSideY);
 
-    const tileGridY = [0];
-    for (let i = 0; i < numFullTilesY + 1; i++) {
-        tileGridY.push(perimeterCutY + i * tileLength);
-    }
-    tileGridY.push(roomLength);
-
-    // Main runners at 1200mm centers, starting 600mm from one wall
-    const mainRunnerPositions = [];
-    let xPos = 600;
-    while (xPos <= roomWidth - 600) {
-        mainRunnerPositions.push(xPos);
-        xPos += 1200;
-    }
-
-    // Check end gap and add extra main runner if necessary
-    const endGap = roomWidth - mainRunnerPositions[mainRunnerPositions.length - 1];
-    if (endGap > 600) {
-        mainRunnerPositions.push(roomWidth - 600);
-    }
+    // Main runners positioning
+    const mainRunnerPositions = calculateMainRunners(roomWidth, adjustedLeftoverPerSideX);
 
     // Cross tees based on configuration
     let crossTeesData;
@@ -126,8 +134,8 @@ function calculateGridLayout(roomLength, roomWidth, tileWidth, tileLength) {
         return null;
     }
 
-    // Suspension wires positions (along main runners every 1200mm starting within 600mm from wall)
-    const suspensionWirePositions = calculateSuspensionWires(roomLength, mainRunnerPositions);
+    // Suspension wires positions (along main runners every 1200mm starting within leftover per side)
+    const suspensionWirePositions = calculateSuspensionWires(roomLength, mainRunnerPositions, adjustedLeftoverPerSideY);
 
     return {
         roomLength,
@@ -136,8 +144,8 @@ function calculateGridLayout(roomLength, roomWidth, tileWidth, tileLength) {
         tileLength,
         numFullTilesX,
         numFullTilesY,
-        perimeterCutX,
-        perimeterCutY,
+        perimeterCutX: adjustedLeftoverPerSideX,
+        perimeterCutY: adjustedLeftoverPerSideY,
         tileGridX,
         tileGridY,
         mainRunnerPositions,
@@ -146,20 +154,65 @@ function calculateGridLayout(roomLength, roomWidth, tileWidth, tileLength) {
     };
 }
 
+function generateTileGridLines(roomDimension, tileDimension, leftoverPerSide) {
+    const gridLines = [0];
+    let currentPosition = leftoverPerSide;
+
+    while (currentPosition <= roomDimension - leftoverPerSide) {
+        gridLines.push(currentPosition);
+        currentPosition += tileDimension;
+    }
+
+    // Adjust for exact fits or rounding errors
+    if (gridLines[gridLines.length - 1] !== roomDimension - leftoverPerSide) {
+        gridLines.push(roomDimension - leftoverPerSide);
+    }
+
+    gridLines.push(roomDimension);
+    return gridLines;
+}
+
+function calculateMainRunners(roomWidth, leftoverPerSideX) {
+    const MAIN_RUNNER_SPACING = 1200; // mm
+    const MIN_END_DISTANCE = 600; // mm
+
+    const mainRunnerPositions = [];
+    let currentPosition = leftoverPerSideX; // Start at leftover per side
+
+    // Add main runners at every 1200mm until we reach or exceed roomWidth - leftoverPerSideX
+    while (currentPosition < roomWidth - leftoverPerSideX) {
+        mainRunnerPositions.push(currentPosition);
+        currentPosition += MAIN_RUNNER_SPACING;
+    }
+
+    // Check if we need to add an extra main runner at the end
+    const lastRunnerPosition = mainRunnerPositions[mainRunnerPositions.length - 1];
+    const remainingDistance = roomWidth - lastRunnerPosition;
+
+    if (remainingDistance > MIN_END_DISTANCE) {
+        // Add an extra main runner at roomWidth - leftoverPerSideX
+        mainRunnerPositions.push(roomWidth - leftoverPerSideX);
+    }
+
+    return mainRunnerPositions;
+}
+
 function calculateCrossTees600x600(tileGridX, tileGridY) {
     const longCrossTees = [];
     const shortCrossTees = [];
 
-    // Long cross tees (1200mm) at every 600mm along the length
-    for (let y of tileGridY) {
+    // Long cross tees (1200mm) aligned with Y-axis (horizontal lines)
+    for (let yIndex = 1; yIndex < tileGridY.length - 1; yIndex++) {
+        const y = tileGridY[yIndex];
         if (y === 0 || y === tileGridY[tileGridY.length - 1]) continue; // Skip perimeter
         for (let i = 0; i < tileGridX.length - 1; i++) {
             longCrossTees.push({ xStart: tileGridX[i], xEnd: tileGridX[i + 1], y });
         }
     }
 
-    // Short cross tees (600mm) between long cross tees
-    for (let x of tileGridX) {
+    // Short cross tees (600mm) aligned with X-axis (vertical lines)
+    for (let xIndex = 1; xIndex < tileGridX.length - 1; xIndex++) {
+        const x = tileGridX[xIndex];
         if (x === 0 || x === tileGridX[tileGridX.length - 1]) continue; // Skip perimeter
         for (let i = 0; i < tileGridY.length - 1; i++) {
             shortCrossTees.push({ x, yStart: tileGridY[i], yEnd: tileGridY[i + 1] });
@@ -172,8 +225,9 @@ function calculateCrossTees600x600(tileGridX, tileGridY) {
 function calculateCrossTees600x1200(tileGridX, tileGridY) {
     const longCrossTees = [];
 
-    // Long cross tees (1200mm) at every 600mm along the length
-    for (let y of tileGridY) {
+    // Long cross tees (1200mm) aligned with Y-axis (horizontal lines)
+    for (let yIndex = 1; yIndex < tileGridY.length - 1; yIndex++) {
+        const y = tileGridY[yIndex];
         if (y === 0 || y === tileGridY[tileGridY.length - 1]) continue; // Skip perimeter
         for (let i = 0; i < tileGridX.length - 1; i++) {
             longCrossTees.push({ xStart: tileGridX[i], xEnd: tileGridX[i + 1], y });
@@ -183,20 +237,19 @@ function calculateCrossTees600x1200(tileGridX, tileGridY) {
     return { longCrossTees };
 }
 
-function calculateSuspensionWires(roomLength, mainRunnerPositions) {
+function calculateSuspensionWires(roomLength, mainRunnerPositions, leftoverPerSideY) {
+    const SUSPENSION_SPACING = 1200; // mm
+
     const suspensionWires = [];
+
     mainRunnerPositions.forEach(x => {
-        let y = 600; // Start within 600mm from wall
-        while (y <= roomLength - 600) {
+        let y = leftoverPerSideY;
+        while (y <= roomLength - leftoverPerSideY) {
             suspensionWires.push({ x, y });
-            y += 1200;
-        }
-        // Check end gap and add extra wire if necessary
-        const endGap = roomLength - y + 1200;
-        if (endGap > 600) {
-            suspensionWires.push({ x, y: roomLength - 600 });
+            y += SUSPENSION_SPACING;
         }
     });
+
     return suspensionWires;
 }
 
@@ -205,7 +258,7 @@ function updateMaterialBreakdown(gridData) {
     const tilesCount = (gridData.numFullTilesX + 2) * (gridData.numFullTilesY + 2);
 
     // Main runners count (standard length 3.6m)
-    const mainRunnersLength = gridData.roomLength * gridData.mainRunnerPositions.length;
+    const mainRunnersLength = gridData.mainRunnerPositions.length * gridData.roomLength; // Total length in mm
     const mainRunnerStandardLength = 3600; // mm
     const mainRunnersCount = Math.ceil(mainRunnersLength / mainRunnerStandardLength);
 
@@ -264,8 +317,6 @@ function drawGrid(gridData, frameRotation) {
     ctx.scale(scaleFactor, scaleFactor);
 
     // Draw grid elements based on user preferences
-    drawPerimeter(ctx, gridData);
-
     if (document.getElementById('showTiles').checked) {
         drawTiles(ctx, gridData);
     }
@@ -278,6 +329,8 @@ function drawGrid(gridData, frameRotation) {
         drawCrossTees(ctx, gridData);
     }
 
+    drawPerimeter(ctx, gridData); // Draw perimeter after other elements
+
     if (document.getElementById('showSuspensionWires').checked) {
         drawSuspensionWires(ctx, gridData);
     }
@@ -288,7 +341,7 @@ function drawGrid(gridData, frameRotation) {
     }
 
     // Draw watermark
-    drawWatermark(ctx, gridData);
+    drawWatermark(ctx);
 
     ctx.restore();
 }
@@ -302,7 +355,7 @@ function calculateScaleFactor(roomWidth, roomLength, canvasWidth, canvasHeight) 
 
 function drawPerimeter(ctx, gridData) {
     ctx.strokeStyle = '#95a5a6'; // Perimeter color
-    ctx.lineWidth = 5 / ctx.getTransform().a; // Adjust line width based on scale
+    ctx.lineWidth = 3 / ctx.getTransform().a; // Adjust line width based on scale
 
     ctx.strokeRect(0, 0, gridData.roomWidth, gridData.roomLength);
 }
@@ -321,9 +374,6 @@ function drawTiles(ctx, gridData) {
 
             ctx.fillRect(x, y, width, height);
             ctx.strokeRect(x, y, width, height);
-
-            // Remove size labels inside tiles
-            // Previously, perimeter tiles had size labels, which are now removed
         }
     }
 }
@@ -385,20 +435,20 @@ function drawDimensions(ctx, gridData) {
     ctx.font = `${20 / ctx.getTransform().a}px Arial`;
     ctx.fillStyle = '#333333';
 
-    // Horizontal dimension
+    // Horizontal dimension (Room Width)
     ctx.beginPath();
-    ctx.moveTo(0, gridData.roomLength + 50);
-    ctx.lineTo(gridData.roomWidth, gridData.roomLength + 50);
+    ctx.moveTo(0, gridData.roomLength + 50 / ctx.getTransform().a);
+    ctx.lineTo(gridData.roomWidth, gridData.roomLength + 50 / ctx.getTransform().a);
     ctx.stroke();
-    ctx.fillText(`${gridData.roomWidth} mm`, gridData.roomWidth / 2 - 30 / ctx.getTransform().a, gridData.roomLength + 70 / ctx.getTransform().a);
+    ctx.fillText(`${gridData.roomWidth} mm`, gridData.roomWidth / 2, gridData.roomLength + 70 / ctx.getTransform().a);
 
-    // Vertical dimension
+    // Vertical dimension (Room Length)
     ctx.beginPath();
-    ctx.moveTo(gridData.roomWidth + 50, 0);
-    ctx.lineTo(gridData.roomWidth + 50, gridData.roomLength);
+    ctx.moveTo(gridData.roomWidth + 50 / ctx.getTransform().a, 0);
+    ctx.lineTo(gridData.roomWidth + 50 / ctx.getTransform().a, gridData.roomLength);
     ctx.stroke();
     ctx.save();
-    ctx.translate(gridData.roomWidth + 70 / ctx.getTransform().a, gridData.roomLength / 2 + 20 / ctx.getTransform().a);
+    ctx.translate(gridData.roomWidth + 70 / ctx.getTransform().a, gridData.roomLength / 2);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText(`${gridData.roomLength} mm`, 0, 0);
     ctx.restore();
@@ -407,7 +457,7 @@ function drawDimensions(ctx, gridData) {
 function drawPerimeterCutDimensions(ctx, gridData) {
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1 / ctx.getTransform().a;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Semi-transparent
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; // Semi-transparent for clarity
     ctx.font = `${16 / ctx.getTransform().a}px Arial`;
     ctx.textAlign = 'center';
 
@@ -449,14 +499,14 @@ function drawPerimeterCutDimensions(ctx, gridData) {
         ctx.lineTo(-30 / ctx.getTransform().a, gridData.roomLength - gridData.perimeterCutY);
         ctx.stroke();
         ctx.save();
-        ctx.translate(-35 / ctx.getTransform().a, gridData.roomLength - gridData.perimeterCutY / 2);
+        ctx.translate(-35 / ctx.getTransform().a, (gridData.roomLength - gridData.perimeterCutY / 2));
         ctx.rotate(-Math.PI / 2);
         ctx.fillText(`${gridData.perimeterCutY.toFixed(0)} mm`, 0, 0);
         ctx.restore();
     }
 }
 
-function drawWatermark(ctx, gridData) {
+function drawWatermark(ctx) {
     // Save current state
     ctx.save();
 
@@ -466,16 +516,18 @@ function drawWatermark(ctx, gridData) {
     // Set font and styles
     const fontSize = 24; // Adjust as needed
     ctx.font = `${fontSize}px Arial`;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // Semi-transparent black
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)'; // Semi-transparent
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Calculate position at the center of the grid visualization
-    const centerX = gridData.roomWidth / 2 * calculateScaleFactor(gridData.roomWidth, gridData.roomLength, ctx.canvas.width, ctx.canvas.height) + (ctx.canvas.width - gridData.roomWidth * calculateScaleFactor(gridData.roomWidth, gridData.roomLength, ctx.canvas.width, ctx.canvas.height)) / 2;
-    const centerY = gridData.roomLength / 2 * calculateScaleFactor(gridData.roomWidth, gridData.roomLength, ctx.canvas.width, ctx.canvas.height) + (ctx.canvas.height - gridData.roomLength * calculateScaleFactor(gridData.roomWidth, gridData.roomLength, ctx.canvas.width, ctx.canvas.height)) / 2;
+    // Calculate position at the center of the canvas
+    const centerX = ctx.canvas.width / 2;
+    const centerY = ctx.canvas.height / 2;
 
-    // Draw the watermark text
-    ctx.fillText('Griestu Meistars', centerX, centerY);
+    // Draw the watermark text (three lines)
+    ctx.fillText('Griestu Meistars', centerX, centerY - fontSize);
+    ctx.fillText('griestumeistars.lv', centerX, centerY);
+    ctx.fillText('+37129285427', centerX, centerY + fontSize);
 
     // Restore the state
     ctx.restore();
