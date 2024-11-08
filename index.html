@@ -2,12 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Griestu Meistars Ceiling Calculator</title>
+    <title>Ceiling Calculator</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
     <header>
-        <h1>Griestu Meistars Ceiling Calculator</h1>
+        <div class="logo-container">
+            <!-- Placeholder for Logo -->
+            <img src="images/myLogo.png" alt="Company Logo" id="companyLogo">
+            <!-- Instructions: Replace 'images/logo.png' with the path to your logo file -->
+        </div>
+        <h1>Ceiling Calculator</h1>
+        <nav>
+            <a href="https://www.griestumeistars.lv/" id="contactUsButton">Contact Us</a>
+        </nav>
     </header>
 
     <main>
@@ -22,22 +30,6 @@
                 <div class="form-group">
                     <label for="roomWidth">Room Width (mm):</label>
                     <input type="number" id="roomWidth" name="roomWidth" min="1" required>
-                </div>
-                <div class="form-group">
-                    <label for="tileSize">Tile Size (mm):</label>
-                    <select id="tileSize" name="tileSize">
-                        <option value="600x600">600 x 600 mm</option>
-                        <option value="600x1200">600 x 1200 mm</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="frameRotation">Frame Rotation:</label>
-                    <select id="frameRotation" name="frameRotation">
-                        <option value="0">0°</option>
-                        <option value="90">90°</option>
-                        <option value="180">180°</option>
-                        <option value="270">270°</option>
-                    </select>
                 </div>
 
                 <h3>Grid Elements to Display:</h3>
@@ -107,6 +99,11 @@
                     <li><span class="legend-color suspension-wires"></span> Suspension Wires</li>
                 </ul>
             </div>
+        </section>
+
+        <!-- Disclaimer Section -->
+        <section id="disclaimer-section">
+            <p>This tool is intended for informational purposes only. The calculations and visualizations provided are estimates and should not be used as the sole basis for any construction or installation decisions. We assume no liability for any errors or inaccuracies in the information provided. Always consult with a professional for precise measurements and guidance.</p>
         </section>
     </main>
 

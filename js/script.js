@@ -8,21 +8,15 @@ function calculateGrid() {
     // Retrieve input values
     const roomLength = parseFloat(document.getElementById('roomLength').value);
     const roomWidth = parseFloat(document.getElementById('roomWidth').value);
-    const tileSize = document.getElementById('tileSize').value;
-    const frameRotation = parseFloat(document.getElementById('frameRotation').value);
 
     // Validate inputs
     if (!validateInputs(roomLength, roomWidth)) {
         return;
     }
 
-    // Process tile size
-    let [tileWidth, tileLength] = tileSize.split('x').map(Number);
-
-    // Ensure tile dimensions are correctly assigned
-    if (tileWidth > tileLength) {
-        [tileWidth, tileLength] = [tileLength, tileWidth];
-    }
+    // Fixed tile size
+    const tileWidth = 600; // mm
+    const tileLength = 600; // mm
 
     // Perform calculations
     const totalArea = (roomLength * roomWidth) / 1e6; // Convert mm² to m²
@@ -45,7 +39,7 @@ function calculateGrid() {
     updateMaterialBreakdown(gridData);
 
     // Draw grid
-    drawGrid(gridData, frameRotation);
+    drawGrid(gridData);
 }
 
 function validateInputs(roomLength, roomWidth) {
@@ -95,47 +89,34 @@ function calculateGridLayout(roomLength, roomWidth, tileWidth, tileLength) {
     }
 
     // Recalculate leftovers after potential reduction
-    const adjustedLeftoverX = roomWidth - numFullTilesX * tileWidth;
-    const adjustedLeftoverPerSideX = adjustedLeftoverX / 2;
-
-    const adjustedLeftoverY = roomLength - numFullTilesY * tileLength;
-    const adjustedLeftoverPerSideY = adjustedLeftoverY / 2;
+    const adjustedLeftoverX = leftoverPerSideX;
+    const adjustedLeftoverY = leftoverPerSideY;
 
     // Ensure that the adjusted leftovers are within the allowed range
-    if ((adjustedLeftoverPerSideX < MIN_LEFTOVER && adjustedLeftoverPerSideX !== 0) ||
-        (adjustedLeftoverPerSideY < MIN_LEFTOVER && adjustedLeftoverPerSideY !== 0)) {
-        alert('Unable to fit tiles with the given constraints. Please adjust room dimensions or tile size.');
+    if ((adjustedLeftoverX < MIN_LEFTOVER && adjustedLeftoverX !== 0) ||
+        (adjustedLeftoverY < MIN_LEFTOVER && adjustedLeftoverY !== 0)) {
+        alert('Unable to fit tiles with the given constraints. Please adjust room dimensions.');
         return null;
     }
 
-    if ((adjustedLeftoverPerSideX > MAX_LEFTOVER && adjustedLeftoverPerSideX !== 0) ||
-        (adjustedLeftoverPerSideY > MAX_LEFTOVER && adjustedLeftoverPerSideY !== 0)) {
-        alert(`The leftover space on each side should not exceed ${MAX_LEFTOVER}mm. Please adjust room dimensions or tile size.`);
+    if ((adjustedLeftoverX > MAX_LEFTOVER && adjustedLeftoverX !== 0) ||
+        (adjustedLeftoverY > MAX_LEFTOVER && adjustedLeftoverY !== 0)) {
+        alert(`The leftover space on each side should not exceed ${MAX_LEFTOVER}mm. Please adjust room dimensions.`);
         return null;
     }
 
     // Generate grid lines for tiles
-    const tileGridX = generateTileGridLines(roomWidth, tileWidth, adjustedLeftoverPerSideX);
-    const tileGridY = generateTileGridLines(roomLength, tileLength, adjustedLeftoverPerSideY);
+    const tileGridX = generateTileGridLines(roomWidth, tileWidth, adjustedLeftoverX);
+    const tileGridY = generateTileGridLines(roomLength, tileLength, adjustedLeftoverY);
 
     // Main runners positioning
-    const mainRunnerPositions = calculateMainRunners(roomWidth, adjustedLeftoverPerSideX);
+    const mainRunnerPositions = calculateMainRunners(roomWidth, adjustedLeftoverX);
 
-    // Cross tees based on configuration
-    let crossTeesData;
-    if (tileWidth === 600 && tileLength === 600) {
-        // 600x600 configuration
-        crossTeesData = calculateCrossTees600x600(tileGridX, tileGridY);
-    } else if (tileWidth === 600 && tileLength === 1200) {
-        // 600x1200 configuration
-        crossTeesData = calculateCrossTees600x1200(tileGridX, tileGridY);
-    } else {
-        alert('Unsupported tile size configuration.');
-        return null;
-    }
+    // Cross tees positioning
+    const crossTeesData = calculateCrossTees(tileGridX, tileGridY, mainRunnerPositions, adjustedLeftoverX, adjustedLeftoverY, roomWidth, roomLength);
 
     // Suspension wires positions (along main runners every 1200mm starting within leftover per side)
-    const suspensionWirePositions = calculateSuspensionWires(roomLength, mainRunnerPositions, adjustedLeftoverPerSideY);
+    const suspensionWirePositions = calculateSuspensionWires(roomLength, mainRunnerPositions, adjustedLeftoverY);
 
     return {
         roomLength,
@@ -144,8 +125,8 @@ function calculateGridLayout(roomLength, roomWidth, tileWidth, tileLength) {
         tileLength,
         numFullTilesX,
         numFullTilesY,
-        perimeterCutX: adjustedLeftoverPerSideX,
-        perimeterCutY: adjustedLeftoverPerSideY,
+        perimeterCutX: adjustedLeftoverX,
+        perimeterCutY: adjustedLeftoverY,
         tileGridX,
         tileGridY,
         mainRunnerPositions,
@@ -158,13 +139,16 @@ function generateTileGridLines(roomDimension, tileDimension, leftoverPerSide) {
     const gridLines = [0];
     let currentPosition = leftoverPerSide;
 
-    while (currentPosition <= roomDimension - leftoverPerSide) {
+    // Adding a small epsilon to account for floating-point precision
+    const EPSILON = 1e-6;
+
+    while (currentPosition <= roomDimension - leftoverPerSide + EPSILON) {
         gridLines.push(currentPosition);
         currentPosition += tileDimension;
     }
 
-    // Adjust for exact fits or rounding errors
-    if (gridLines[gridLines.length - 1] !== roomDimension - leftoverPerSide) {
+    // Ensure that the last internal grid line is included
+    if (Math.abs(gridLines[gridLines.length - 1] - (roomDimension - leftoverPerSide)) > EPSILON) {
         gridLines.push(roomDimension - leftoverPerSide);
     }
 
@@ -174,77 +158,137 @@ function generateTileGridLines(roomDimension, tileDimension, leftoverPerSide) {
 
 function calculateMainRunners(roomWidth, leftoverPerSideX) {
     const MAIN_RUNNER_SPACING = 1200; // mm
-    const MIN_END_DISTANCE = 600; // mm
 
     const mainRunnerPositions = [];
-    let currentPosition = leftoverPerSideX; // Start at leftover per side
+    let currentPosition = leftoverPerSideX;
 
-    // Add main runners at every 1200mm until we reach or exceed roomWidth - leftoverPerSideX
-    while (currentPosition < roomWidth - leftoverPerSideX) {
+    // Place main runners every 1200mm starting from the left
+    while (currentPosition < roomWidth - leftoverPerSideX + 1e-6) {
         mainRunnerPositions.push(currentPosition);
         currentPosition += MAIN_RUNNER_SPACING;
     }
 
-    // Check if we need to add an extra main runner at the end
-    const lastRunnerPosition = mainRunnerPositions[mainRunnerPositions.length - 1];
-    const remainingDistance = roomWidth - lastRunnerPosition;
-
-    if (remainingDistance > MIN_END_DISTANCE) {
-        // Add an extra main runner at roomWidth - leftoverPerSideX
+    // Ensure last main runner is added if not already
+    if (roomWidth - leftoverPerSideX - mainRunnerPositions[mainRunnerPositions.length - 1] > 1e-6) {
         mainRunnerPositions.push(roomWidth - leftoverPerSideX);
     }
 
     return mainRunnerPositions;
 }
 
-function calculateCrossTees600x600(tileGridX, tileGridY) {
+function calculateCrossTees(tileGridX, tileGridY, mainRunnerPositions, adjustedLeftoverX, adjustedLeftoverY, roomWidth, roomLength) {
     const longCrossTees = [];
     const shortCrossTees = [];
 
-    // Long cross tees (1200mm) aligned with Y-axis (horizontal lines)
+    // For each tile line in Y direction (excluding perimeter)
     for (let yIndex = 1; yIndex < tileGridY.length - 1; yIndex++) {
         const y = tileGridY[yIndex];
-        if (y === 0 || y === tileGridY[tileGridY.length - 1]) continue; // Skip perimeter
-        for (let i = 0; i < tileGridX.length - 1; i++) {
-            longCrossTees.push({ xStart: tileGridX[i], xEnd: tileGridX[i + 1], y });
+
+        // Place cross tees between main runners (excluding perimeter)
+        for (let i = 0; i < mainRunnerPositions.length - 1; i++) {
+            const xStart = mainRunnerPositions[i];
+            const xEnd = mainRunnerPositions[i + 1];
+            const distance = xEnd - xStart;
+
+            if (Math.abs(distance - 1200) < 1e-6) {
+                // Use long cross tee
+                longCrossTees.push({ xStart, xEnd, y });
+            } else if (Math.abs(distance - 600) < 1e-6 || distance < 600) {
+                // Use short cross tee
+                shortCrossTees.push({
+                    xStart,
+                    xEnd,
+                    y,
+                    orientation: 'horizontal',
+                    atPerimeter: false
+                });
+            } else {
+                // For other distances, handle accordingly (e.g., use multiple tees)
+                // This could be expanded to handle different sizes if necessary
+            }
+        }
+
+        // At the left perimeter cut
+        if (adjustedLeftoverX > 0 && adjustedLeftoverX <= 600) {
+            shortCrossTees.push({
+                xStart: 0,
+                xEnd: adjustedLeftoverX,
+                y,
+                orientation: 'horizontal',
+                atPerimeter: true
+            });
+        }
+
+        // At the right perimeter cut
+        if (adjustedLeftoverX > 0 && adjustedLeftoverX <= 600) {
+            shortCrossTees.push({
+                xStart: roomWidth - adjustedLeftoverX,
+                xEnd: roomWidth,
+                y,
+                orientation: 'horizontal',
+                atPerimeter: true
+            });
         }
     }
 
-    // Short cross tees (600mm) aligned with X-axis (vertical lines)
+    // Place short cross tees along X direction (excluding perimeter)
     for (let xIndex = 1; xIndex < tileGridX.length - 1; xIndex++) {
         const x = tileGridX[xIndex];
-        if (x === 0 || x === tileGridX[tileGridX.length - 1]) continue; // Skip perimeter
-        for (let i = 0; i < tileGridY.length - 1; i++) {
-            shortCrossTees.push({ x, yStart: tileGridY[i], yEnd: tileGridY[i + 1] });
+
+        // Skip if x coincides with a main runner position
+        if (mainRunnerPositions.some(pos => Math.abs(pos - x) < 1e-6)) continue;
+
+        // For each space between tile grid lines in Y direction (excluding perimeter)
+        for (let yIndex = 1; yIndex < tileGridY.length - 1; yIndex++) {
+            const yStart = tileGridY[yIndex];
+            const yEnd = tileGridY[yIndex + 1];
+
+            // Place short cross tees
+            shortCrossTees.push({
+                x,
+                yStart,
+                yEnd,
+                orientation: 'vertical',
+                atPerimeter: false
+            });
+        }
+
+        // At the top perimeter cut
+        if (adjustedLeftoverY > 0 && adjustedLeftoverY <= 600) {
+            shortCrossTees.push({
+                x,
+                yStart: 0,
+                yEnd: adjustedLeftoverY,
+                orientation: 'vertical',
+                atPerimeter: true,
+                position: 'top'
+            });
+        }
+
+        // At the bottom perimeter cut
+        if (adjustedLeftoverY > 0 && adjustedLeftoverY <= 600) {
+            shortCrossTees.push({
+                x,
+                yStart: roomLength - adjustedLeftoverY,
+                yEnd: roomLength,
+                orientation: 'vertical',
+                atPerimeter: true,
+                position: 'bottom'
+            });
         }
     }
 
     return { longCrossTees, shortCrossTees };
 }
 
-function calculateCrossTees600x1200(tileGridX, tileGridY) {
-    const longCrossTees = [];
-
-    // Long cross tees (1200mm) aligned with Y-axis (horizontal lines)
-    for (let yIndex = 1; yIndex < tileGridY.length - 1; yIndex++) {
-        const y = tileGridY[yIndex];
-        if (y === 0 || y === tileGridY[tileGridY.length - 1]) continue; // Skip perimeter
-        for (let i = 0; i < tileGridX.length - 1; i++) {
-            longCrossTees.push({ xStart: tileGridX[i], xEnd: tileGridX[i + 1], y });
-        }
-    }
-
-    return { longCrossTees };
-}
-
-function calculateSuspensionWires(roomLength, mainRunnerPositions, leftoverPerSideY) {
+function calculateSuspensionWires(roomLength, mainRunnerPositions, adjustedLeftoverY) {
     const SUSPENSION_SPACING = 1200; // mm
 
     const suspensionWires = [];
 
     mainRunnerPositions.forEach(x => {
-        let y = leftoverPerSideY;
-        while (y <= roomLength - leftoverPerSideY) {
+        let y = adjustedLeftoverY;
+        while (y <= roomLength - adjustedLeftoverY + 1e-6) {
             suspensionWires.push({ x, y });
             y += SUSPENSION_SPACING;
         }
@@ -257,21 +301,19 @@ function updateMaterialBreakdown(gridData) {
     // Tiles count (including perimeter tiles)
     const tilesCount = (gridData.numFullTilesX + 2) * (gridData.numFullTilesY + 2);
 
-    // Main runners count (standard length 3.6m)
-    const mainRunnersLength = gridData.mainRunnerPositions.length * gridData.roomLength; // Total length in mm
+    // Main runners
     const mainRunnerStandardLength = 3600; // mm
-    const mainRunnersCount = Math.ceil(mainRunnersLength / mainRunnerStandardLength);
+    const mainRunnerRows = gridData.mainRunnerPositions.length;
+    const mainRunnersPerRow = Math.ceil(gridData.roomLength / mainRunnerStandardLength);
+    const totalMainRunners = mainRunnerRows * mainRunnersPerRow;
 
     // Cross tees count
-    let longCrossTeesCount = 0;
-    let shortCrossTeesCount = 0;
+    const longCrossTeesCount = gridData.crossTeesData.longCrossTees.length;
 
-    if (gridData.crossTeesData.longCrossTees) {
-        longCrossTeesCount = gridData.crossTeesData.longCrossTees.length;
-    }
-    if (gridData.crossTeesData.shortCrossTees) {
-        shortCrossTeesCount = gridData.crossTeesData.shortCrossTees.length;
-    }
+    // Short cross tees count (exclude vertical tees at the bottom perimeter)
+    const shortCrossTeesCount = gridData.crossTeesData.shortCrossTees.filter(ct => {
+        return !(ct.orientation === 'vertical' && ct.atPerimeter && ct.position === 'bottom');
+    }).length;
 
     // Suspension wires count
     const suspensionWiresCount = gridData.suspensionWirePositions.length;
@@ -283,14 +325,18 @@ function updateMaterialBreakdown(gridData) {
 
     // Update material counts in the DOM
     document.getElementById('tilesCount').textContent = tilesCount;
-    document.getElementById('mainRunnersCount').textContent = mainRunnersCount;
+    document.getElementById('mainRunnersCount').textContent = totalMainRunners;
     document.getElementById('longCrossTeesCount').textContent = longCrossTeesCount;
     document.getElementById('shortCrossTeesCount').textContent = shortCrossTeesCount;
     document.getElementById('suspensionWiresCount').textContent = suspensionWiresCount;
     document.getElementById('perimeterTrimsCount').textContent = perimeterTrimsCount;
+
+    // Update perimeter cuts in the DOM
+    document.getElementById('perimeterCutWidth').textContent = gridData.perimeterCutX.toFixed(0);
+    document.getElementById('perimeterCutLength').textContent = gridData.perimeterCutY.toFixed(0);
 }
 
-function drawGrid(gridData, frameRotation) {
+function drawGrid(gridData) {
     const canvas = document.getElementById('ceilingCanvas');
     const ctx = canvas.getContext('2d');
 
@@ -310,9 +356,6 @@ function drawGrid(gridData, frameRotation) {
 
     // Apply transformations
     ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
-    ctx.rotate((frameRotation * Math.PI) / 180);
-    ctx.translate(-canvas.width / 2, -canvas.height / 2);
     ctx.translate(offsetX, offsetY);
     ctx.scale(scaleFactor, scaleFactor);
 
@@ -410,10 +453,19 @@ function drawCrossTees(ctx, gridData) {
         ctx.lineWidth = 2 / ctx.getTransform().a;
 
         gridData.crossTeesData.shortCrossTees.forEach(ct => {
-            ctx.beginPath();
-            ctx.moveTo(ct.x, ct.yStart);
-            ctx.lineTo(ct.x, ct.yEnd);
-            ctx.stroke();
+            if (ct.yStart !== undefined && ct.yEnd !== undefined) {
+                // Vertical short cross tee
+                ctx.beginPath();
+                ctx.moveTo(ct.x, ct.yStart);
+                ctx.lineTo(ct.x, ct.yEnd);
+                ctx.stroke();
+            } else if (ct.xStart !== undefined && ct.xEnd !== undefined) {
+                // Horizontal short cross tee
+                ctx.beginPath();
+                ctx.moveTo(ct.xStart, ct.y);
+                ctx.lineTo(ct.xEnd, ct.y);
+                ctx.stroke();
+            }
         });
     }
 }
